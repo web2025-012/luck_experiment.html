@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>サイコロ課題</title>
+<style>
+:root{--navy:#1E2761;--gold:#D4AF37;--bg:#f4f5fa;--text:#222;--line:#c9cde0}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic",Meiryo,sans-serif;line-height:1.8;font-size:16px}
+#bar{height:5px;background:#dfe2ef;position:sticky;top:0;z-index:5}
+#barfill{height:100%;width:0;background:var(--navy);transition:width .3s}
+#banner{display:none;background:#fff4cc;color:#6b5600;font-size:.85rem;padding:6px 12px;text-align:center}
+main{max-width:640px;margin:0 auto;padding:24px 18px 70px}
+h1{font-size:1.3rem;color:var(--navy);margin:.2em 0 .8em;line-height:1.5}
+h2{font-size:1.05rem;color:var(--navy);margin:.2em 0 .6em}
+.card{background:#fff;border-radius:12px;padding:16px 20px;box-shadow:0 1px 4px rgba(0,0,0,.08);margin-bottom:16px}
+.card ul{padding-left:1.2em;margin:.5em 0}
+.center{text-align:center}
+.small{font-size:.85rem;color:#666}
+.sub{color:#555;margin:.3em 0}
+.q{font-size:1.05rem;margin:1em 0 .8em;font-weight:600}
+.instr{font-size:1.15rem;font-weight:600;margin:1em 0 .4em}
+.btn{background:var(--navy);color:#fff;border:0;border-radius:10px;padding:13px 30px;font-size:1.05rem;cursor:pointer;min-width:160px;font-family:inherit}
+.btn:disabled{opacity:.35;cursor:not-allowed}
+.btn.ghost{background:#fff;color:var(--navy);border:2px solid var(--navy)}
+.err{color:#b8433a;min-height:1.4em;margin:.3em 0}
+.num,textarea,select{font-size:1rem;padding:10px;border:2px solid var(--line);border-radius:8px;font-family:inherit}
+.num{width:6em;text-align:center}
+textarea{width:100%}
+.scale{display:flex;gap:6px}
+.pt{flex:1;padding:12px 0;border:2px solid var(--line);border-radius:10px;background:#fff;font-size:1rem;cursor:pointer;color:var(--text);font-family:inherit}
+.pt.big{font-size:1.6rem;padding:16px 0}
+.pt.sel{background:var(--navy);border-color:var(--navy);color:#fff}
+.anchors{display:flex;justify-content:space-between;gap:12px;font-size:.82rem;color:#666;margin:6px 0 18px}
+.anchors span{max-width:48%}
+.anchors span:last-child{text-align:right}
+.opt{display:block;background:#fff;border:2px solid var(--line);border-radius:10px;padding:10px 14px;margin:8px 0;cursor:pointer}
+.opt.sel{border-color:var(--navy);background:#eef0fb}
+.opt input{margin-right:8px}
+.check{display:block;margin:16px 0;cursor:pointer}
+.die{width:128px;height:128px;margin:16px auto;border:3px solid var(--navy);border-radius:22px;background:#fff;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);padding:16px}
+.die.shake{animation:shake .16s infinite}
+.pip{width:72%;height:72%;margin:auto;border-radius:50%;background:var(--navy)}
+@keyframes shake{0%{transform:rotate(-6deg)}50%{transform:rotate(6deg)}100%{transform:rotate(-6deg)}}
+pre{background:#fff;border:1px solid var(--line);border-radius:8px;padding:12px;font-size:.8rem;white-space:pre-wrap;word-break:break-all;text-align:left}
+</style>
+</head>
+<body>
+<div id="bar"><div id="barfill"></div></div>
+<div id="banner"></div>
+<main id="app"><noscript>このページの利用にはJavaScriptを有効にしてください。</noscript></main>
+
+<script>
+(function () {
+'use strict';
+
+/* ================= 設定（ここだけ書き換えればOK） ================= */
+const CONFIG = {
+  GAS_URL: 'https://script.google.com/macros/s/AKfycbzZopTtHmLxlpVXftvP9-9vkJLeR5HR7aeRgjOx66g7tOGOWBlVr1w8cdjMslVj_jgt/exec', // Apps Script ウェブアプリのURL。空欄＝テストモード（データは送信されない）
+  N_TRIALS: 20,              // サイコロを振る回数
+  INSTR_DELAY_MS: 5000,      // 暗示文が出てから「次へ」が出るまで（両群共通）
+  ROLL_ANIM_MS: 700,         // サイコロが転がる演出の長さ
+  RESULT_SHOW_MS: 1500,      // 出目を表示する時間
+  SHOW_LUCKY_REMINDER: true, // 課題中にラッキーナンバーを画面に表示するか
+  TEXT: {
+    L: 'このサイコロは、今まで使った人の多くが「運がいい」と言っています。',  // 暗示群
+    C: 'これは、ただのサイコロです。'                                         // 統制群
+  },
+  CONTACT: '【帝京大学 文学部心理学科 實吉ゼミ 杉本愛莉 / メール：24a605012rn@stu.teikyo-u.ac.jp】'
+};
+
+/* ================= 共通部品 ================= */
+const $ = (s, r) => (r || document).querySelector(s);
+const $$ = (s, r) => Array.prototype.slice.call((r || document).querySelectorAll(s));
+const sleep = ms => new Promise(res => setTimeout(res, ms));
+const app = $('#app');
+const params = new URLSearchParams(location.search);
+const testMode = !CONFIG.GAS_URL;
+
+// テストモード限定の開発用オプション（?fast=1 で待ち時間を短縮、?n=3 で試行数を変更、?cond=L|C で条件を指定）
+if (testMode && params.get('fast')) {
+  CONFIG.INSTR_DELAY_MS = 300; CONFIG.ROLL_ANIM_MS = 100; CONFIG.RESULT_SHOW_MS = 100;
+}
+if (testMode && Number(params.get('n')) > 0) CONFIG.N_TRIALS = Number(params.get('n'));
+
+const S = { pid: '', cond: '', via: '', lucky: null, rolls: [], a: {}, instrMs: null, taskStart: null, taskMs: null, t0: performance.now() };
+
+function show(html) { app.innerHTML = html; window.scrollTo(0, 0); }
+
+function rollDie() {
+  const c = window.crypto;
+  if (c && c.getRandomValues) {
+    const a = new Uint8Array(1);
+    do { c.getRandomValues(a); } while (a[0] >= 252); // 252 = 6 x 42（偏りをなくす）
+    return (a[0] % 6) + 1;
+  }
+  return Math.floor(Math.random() * 6) + 1;
+}
+
+const PIPS = { 1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8] };
+function dieHTML(face, shake) {
+  const on = face ? PIPS[face] : [];
+  let cells = '';
+  for (let i = 0; i < 9; i++) cells += on.indexOf(i) >= 0 ? '<span class="pip"></span>' : '<span></span>';
+  return '<div class="die' + (shake ? ' shake' : '') + '">' + cells + '</div>';
+}
+
+function scaleHTML(key, n, left, right) {
+  let b = '';
+  for (let i = 1; i <= n; i++) b += '<button type="button" class="pt" data-v="' + i + '">' + i + '</button>';
+  return '<div class="scalewrap" data-key="' + key + '"><div class="scale">' + b + '</div>' +
+         '<div class="anchors"><span>' + left + '</span><span>' + right + '</span></div></div>';
+}
+function bindScales(onChange) {
+  $$('.scalewrap').forEach(w => {
+    $$('.pt', w).forEach(btn => {
+      btn.onclick = () => {
+        $$('.pt', w).forEach(x => x.classList.remove('sel'));
+        btn.classList.add('sel');
+        S.a[w.dataset.key] = Number(btn.dataset.v);
+        onChange();
+      };
+    });
+  });
+}
+function bindRadios() {
+  $$('.opt input').forEach(inp => {
+    inp.onchange = () => {
+      $$('.opt input[name="' + inp.name + '"]').forEach(x => x.parentNode.classList.toggle('sel', x.checked));
+    };
+  });
+}
+function radioValue(name) {
+  const el = $('input[name="' + name + '"]:checked');
+  return el ? el.value : null;
+}
+
+/* ================= 画面の流れ ================= */
+const steps = [stepConsent, stepAssign, stepInstr, stepLucky, stepTaskIntro, stepTrials,
+               stepQ1, stepQ2, stepQ3, stepQ4, stepQ5, stepCheck, stepDemo, stepSubmit, stepDebrief];
+let idx = -1;
+function next() {
+  idx++;
+  $('#barfill').style.width = Math.round(idx / (steps.length - 1) * 100) + '%';
+  steps[idx]();
+}
+
+/* 1. 同意 */
+function stepConsent() {
+  if (!testMode) {
+    try {
+      if (localStorage.getItem('luck_done')) {
+        show('<h1>ご参加済みです</h1><p>この課題にはすでにご参加いただいています。ご協力ありがとうございました。</p>');
+        return;
+      }
+    } catch (e) {}
+  }
+  show(
+    '<h1>サイコロを使った課題へのご協力のお願い</h1>' +
+    '<div class="card">' +
+    '<p>これは、サイコロを使った簡単な課題と、その後の短いアンケートに回答していただく心理学の研究です。</p>' +
+    '<ul>' +
+    '<li>所要時間：約6分（パソコン・スマートフォンのどちらでも可）</li>' +
+    '<li>内容：画面上のサイコロを20回振り、その後いくつかの質問に答えます。</li>' +
+    '<li>参加は任意です。途中でやめたい場合は、ブラウザを閉じてください（その場合、データは使用されません）。</li>' +
+    '<li>氏名・メールアドレスなど、個人を特定する情報は集めません。回答は統計的に処理され、研究目的以外には使いません。</li>' +
+    '<li>研究の詳しい目的は、課題のあとにご説明します。</li>' +
+    '<li>18歳以上の方が対象です。</li>' +
+    '</ul>' +
+    '<p class="small">研究者：' + CONFIG.CONTACT + '</p>' +
+    '</div>' +
+    '<label class="check"><input type="checkbox" id="agree"> 上記を読み、18歳以上であることを確認し、同意して参加します</label>' +
+    '<p class="center"><button id="go" class="btn" disabled>参加する</button></p>'
+  );
+  $('#agree').onchange = () => { $('#go').disabled = !$('#agree').checked; };
+  $('#go').onclick = next;
+}
+
+/* 2. 条件割当（人数の少ない群へ。サーバーに繋がらなければ端末内の乱数） */
+async function assignCondition() {
+  if (testMode) {
+    const q = params.get('cond');
+    return { pid: 'test-' + Math.random().toString(36).slice(2, 8), cond: (q === 'L' || q === 'C') ? q : (Math.random() < 0.5 ? 'L' : 'C'), via: 'test' };
+  }
+  try {
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), 8000);
+    const r = await fetch(CONFIG.GAS_URL + '?action=assign', { signal: ctrl.signal });
+    clearTimeout(to);
+    const j = await r.json();
+    if (j && j.ok && (j.cond === 'L' || j.cond === 'C')) return { pid: j.pid, cond: j.cond, via: 'server' };
+  } catch (e) {}
+  return { pid: 'local-' + Math.random().toString(36).slice(2, 10), cond: Math.random() < 0.5 ? 'L' : 'C', via: 'local' };
+}
+async function stepAssign() {
+  show('<p class="center">読み込み中…</p>');
+  let a = null;
+  if (!testMode) {
+    // ページを更新しても同じ条件・同じIDになるようにする
+    try { a = JSON.parse(localStorage.getItem('luck_assign') || 'null'); } catch (e) {}
+  }
+  if (!a) {
+    a = await assignCondition();
+    if (!testMode) { try { localStorage.setItem('luck_assign', JSON.stringify(a)); } catch (e) {} }
+  }
+  S.pid = a.pid; S.cond = a.cond; S.via = a.via;
+  if (testMode) {
+    const b = $('#banner');
+    b.style.display = 'block';
+    b.textContent = 'テストモード：データは送信されません（条件 = ' + S.cond + '）';
+  }
+  next();
+}
+
+/* 3. 暗示の教示（独立した画面。「次へ」は数秒後に出現。待ち時間は両群共通） */
+function stepInstr() {
+  show(
+    '<h2>サイコロについて</h2>' +
+    '<div class="card center">' + dieHTML(null) +
+    '<p class="instr">' + CONFIG.TEXT[S.cond] + '</p></div>' +
+    '<p class="center"><button id="go" class="btn" style="visibility:hidden">次へ</button></p>'
+  );
+  const t = performance.now();
+  setTimeout(() => { $('#go').style.visibility = 'visible'; }, CONFIG.INSTR_DELAY_MS);
+  $('#go').onclick = () => { S.instrMs = Math.round(performance.now() - t); next(); };
+}
+
+/* 4. ラッキーナンバー */
+function stepLucky() {
+  let b = '';
+  for (let n = 1; n <= 6; n++) b += '<button type="button" class="pt big" data-v="' + n + '">' + n + '</button>';
+  show(
+    '<h2>ラッキーナンバー</h2>' +
+    '<p class="q">1〜6の中から、あなたのラッキーナンバーを1つ選んでください。</p>' +
+    '<div class="scale">' + b + '</div>' +
+    '<p class="center" style="margin-top:24px"><button id="go" class="btn" disabled>決定</button></p>'
+  );
+  $$('.pt').forEach(btn => {
+    btn.onclick = () => {
+      $$('.pt').forEach(x => x.classList.remove('sel'));
+      btn.classList.add('sel');
+      S.lucky = Number(btn.dataset.v);
+      $('#go').disabled = false;
+    };
+  });
+  $('#go').onclick = next;
+}
+
+/* 5. 課題の説明 */
+function stepTaskIntro() {
+  show(
+    '<h2>サイコロを振ります</h2>' +
+    '<div class="card">' +
+    '<p>これからサイコロを' + CONFIG.N_TRIALS + '回振ります。「サイコロを振る」ボタンを押すたびに1回振られ、出た目が少しの間だけ表示されます。</p>' +
+    '<p>出た目を数えたり、メモを取ったり、スクリーンショットを撮ったりせず、ふつうに振ってください。</p>' +
+    '<p>途中でページを閉じたり、更新したりしないでください。</p>' +
+    '</div>' +
+    '<p class="center"><button id="go" class="btn">はじめる</button></p>'
+  );
+  $('#go').onclick = next;
+}
+
+/* 6. サイコロ課題 */
+function stepTrials() {
+  const N = CONFIG.N_TRIALS;
+  let done = 0;
+  show(
+    '<div class="center">' +
+    (CONFIG.SHOW_LUCKY_REMINDER ? '<p class="sub">あなたのラッキーナンバー：<b>' + S.lucky + '</b></p>' : '') +
+    '<p id="count" class="sub"></p>' +
+    '<div id="dieBox">' + dieHTML(null) + '</div>' +
+    '<p><button id="roll" class="btn">サイコロを振る</button></p>' +
+    '</div>'
+  );
+  const roll = $('#roll'), box = $('#dieBox'), count = $('#count');
+  const updateCount = () => { count.textContent = (done + 1) + ' / ' + N + ' 回目'; };
+  updateCount();
+  roll.onclick = async () => {
+    roll.disabled = true;
+    if (!S.taskStart) S.taskStart = performance.now();
+    const val = rollDie();
+    const t0 = performance.now();
+    while (performance.now() - t0 < CONFIG.ROLL_ANIM_MS) {
+      box.innerHTML = dieHTML(1 + Math.floor(Math.random() * 6), true); // 見た目だけの演出
+      await sleep(80);
+    }
+    box.innerHTML = dieHTML(val);
+    S.rolls.push(val);
+    done++;
+    await sleep(CONFIG.RESULT_SHOW_MS);
+    box.innerHTML = dieHTML(null);
+    if (done >= N) { S.taskMs = Math.round(performance.now() - S.taskStart); next(); return; }
+    updateCount();
+    roll.disabled = false;
+  };
+}
+
+/* 7. 質問 */
+function stepQ1() {
+  show(
+    '<h2>質問 1</h2>' +
+    '<p class="q">' + CONFIG.N_TRIALS + '回のうち、あなたのラッキーナンバー（' + S.lucky + '）は何回出たと思いますか？</p>' +
+    '<p class="center"><input id="q1" class="num" type="number" inputmode="numeric" min="0" max="' + CONFIG.N_TRIALS + '" step="1"> 回</p>' +
+    '<p id="err" class="err center"></p>' +
+    '<p class="center"><button id="go" class="btn">次へ</button></p>'
+  );
+  $('#go').onclick = () => {
+    const v = $('#q1').value.trim();
+    if (!/^\d+$/.test(v) || Number(v) > CONFIG.N_TRIALS) {
+      $('#err').textContent = '0〜' + CONFIG.N_TRIALS + 'の整数で入力してください。';
+      return;
+    }
+    S.a.q1 = Number(v);
+    next();
+  };
+}
+function scaleStep(key, title, text, n, left, right) {
+  show(
+    '<h2>' + title + '</h2><p class="q">' + text + '</p>' +
+    scaleHTML(key, n, left, right) +
+    '<p class="center"><button id="go" class="btn" disabled>次へ</button></p>'
+  );
+  bindScales(() => { $('#go').disabled = (S.a[key] == null); });
+  $('#go').onclick = next;
+}
+function stepQ2() { scaleStep('q2', '質問 2', 'ラッキーナンバーは、よく出たと思いますか？', 7, '1：全く出なかった', '7：非常によく出た'); }
+function stepQ3() { scaleStep('q3', '質問 3', '今日は運が良かったと思いますか？', 7, '1：全くそう思わない', '7：非常にそう思う'); }
+function stepQ4() { scaleStep('q4', '質問 4', 'このサイコロは、運が良いサイコロだと思いますか？', 7, '1：全くそう思わない', '7：非常にそう思う'); }
+
+function stepQ5() {
+  show(
+    '<h2>質問 5</h2>' +
+    '<p class="q">ふだん、自分は運がいいほうだと思いますか？</p>' +
+    scaleHTML('q5', 9, '1：全くそう思わない', '9：非常にそう思う') +
+    '<p class="q">注意力の確認のため、この項目では「3」を選んでください。</p>' +
+    scaleHTML('attn', 7, '1', '7') +
+    '<p class="center"><button id="go" class="btn" disabled>次へ</button></p>'
+  );
+  bindScales(() => { $('#go').disabled = (S.a.q5 == null || S.a.attn == null); });
+  $('#go').onclick = next;
+}
+
+/* 8. 確認項目（教示の想起・メモの有無・目的の推測） */
+function stepCheck() {
+  show(
+    '<h2>最後に、いくつか質問があります</h2>' +
+    '<p class="q">最初のほうの画面で、サイコロについてどのように書かれていましたか？</p>' +
+    '<label class="opt"><input type="radio" name="recall" value="L"> 今まで使った人の多くが「運がいい」と言っている、と書かれていた</label>' +
+    '<label class="opt"><input type="radio" name="recall" value="C"> ただのサイコロだ、と書かれていた</label>' +
+    '<label class="opt"><input type="radio" name="recall" value="N"> 覚えていない／特に何も書かれていなかった</label>' +
+    '<p class="q">サイコロを振っている間に、出た目をメモしたり、指で数えたりしましたか？<br><span class="small">正直にお答えください。「はい」でも不利になることはありません。</span></p>' +
+    '<label class="opt"><input type="radio" name="memo" value="no"> いいえ</label>' +
+    '<label class="opt"><input type="radio" name="memo" value="yes"> はい</label>' +
+    '<p class="q">この課題の目的は何だと思いましたか？（任意）</p>' +
+    '<textarea id="purpose" rows="3"></textarea>' +
+    '<p id="err" class="err center"></p>' +
+    '<p class="center"><button id="go" class="btn">次へ</button></p>'
+  );
+  bindRadios();
+  $('#go').onclick = () => {
+    const r = radioValue('recall'), m = radioValue('memo');
+    if (!r || !m) { $('#err').textContent = '2つの質問にお答えください。'; return; }
+    S.a.recall = r; S.a.memo = m; S.a.purpose = $('#purpose').value.trim();
+    next();
+  };
+}
+
+function stepDemo() {
+  show(
+    '<h2>あなたについて（任意）</h2>' +
+    '<p>年齢：<input id="age" class="num" type="number" inputmode="numeric" min="18" max="120"> 歳</p>' +
+    '<p>性別：<select id="gender"><option value="">回答しない</option><option value="女性">女性</option><option value="男性">男性</option><option value="その他">その他</option></select></p>' +
+    '<p id="err" class="err"></p>' +
+    '<p class="center"><button id="go" class="btn">回答を送信する</button></p>'
+  );
+  $('#go').onclick = () => {
+    const age = $('#age').value.trim();
+    if (age && !/^\d{2,3}$/.test(age)) { $('#err').textContent = '年齢は数字で入力してください（空欄でも構いません）。'; return; }
+    S.a.age = age ? Number(age) : '';
+    S.a.gender = $('#gender').value;
+    next();
+  };
+}
+
+/* 9. 送信 */
+function buildPayload() {
+  const hit = S.rolls.filter(v => v === S.lucky).length;
+  return {
+    pid: S.pid, cond: S.cond, assign_via: S.via, lucky: S.lucky,
+    rolls: S.rolls.join(','), n_trials: S.rolls.length, hit: hit,
+    q1_est: S.a.q1, q2_impression: S.a.q2, q3_luck_today: S.a.q3, q4_check: S.a.q4, q5_belief: S.a.q5,
+    attn_value: S.a.attn, attn_pass: S.a.attn === 3 ? 1 : 0,
+    recall: S.a.recall, recall_correct: S.a.recall === S.cond ? 1 : 0,
+    memo: S.a.memo, purpose: S.a.purpose || '', age: S.a.age === undefined ? '' : S.a.age, gender: S.a.gender || '',
+    instr_ms: S.instrMs, task_ms: S.taskMs, total_ms: Math.round(performance.now() - S.t0),
+    screen_w: window.innerWidth, ua: navigator.userAgent.slice(0, 120), test_mode: testMode ? 1 : 0
+  };
+}
+function toCSV(p) {
+  const keys = Object.keys(p);
+  const esc = v => '"' + String(v === undefined || v === null ? '' : v).replace(/"/g, '""') + '"';
+  return '\ufeff' + keys.join(',') + '\n' + keys.map(k => esc(p[k])).join(',') + '\n';
+}
+function downloadCSV(name, text) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' }));
+  a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+}
+
+async function stepSubmit() {
+  const payload = buildPayload();
+  if (testMode) {
+    show(
+      '<h2>テストモード：送信されるデータ</h2>' +
+      '<pre id="dump"></pre>' +
+      '<p class="center"><button id="csv" class="btn ghost">CSVで保存</button> <button id="go" class="btn">デブリーフィングへ</button></p>'
+    );
+    $('#dump').textContent = JSON.stringify(payload, null, 1);
+    $('#csv').onclick = () => downloadCSV('test_' + S.pid + '.csv', toCSV(payload));
+    $('#go').onclick = next;
+    return;
+  }
+  show('<p class="center">送信中です。このままお待ちください…</p>');
+  for (let i = 0; i < 3; i++) {
+    try {
+      const r = await fetch(CONFIG.GAS_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(payload) });
+      const j = await r.json();
+      if (j && j.ok) { try { localStorage.setItem('luck_done', '1'); } catch (e) {} next(); return; }
+    } catch (e) {}
+    await sleep(1500);
+  }
+  show(
+    '<h1>送信できませんでした</h1>' +
+    '<p>通信状況をご確認のうえ、もう一度お試しください。うまくいかない場合は、データを保存して研究者にお送りください。</p>' +
+    '<p class="center"><button id="retry" class="btn">再送信</button> <button id="csv" class="btn ghost">データを保存</button></p>'
+  );
+  $('#retry').onclick = stepSubmit;
+  $('#csv').onclick = () => downloadCSV('luck_' + S.pid + '.csv', toCSV(payload));
+}
+
+/* 10. デブリーフィング */
+function stepDebrief() {
+  show(
+    '<h1>ご協力ありがとうございました</h1>' +
+    '<div class="card">' +
+    '<p>この研究の目的は、「運がいい」という暗示が、結果の記憶や運の感じ方に影響するかを調べることでした。</p>' +
+    '<p>課題の最初の画面には、参加者によって異なる説明が表示されていました（「今まで使った人の多くが『運がいい』と言っている」という説明、または「ただのサイコロ」という説明）。前者は研究のために用意した説明で、事実ではありません。サイコロは全員、まったく同じ公平な乱数で動いており、出た目の偏りは偶然です。</p>' +
+    '<p>目的を事前にすべてお伝えしなかったのは、先に知ると回答に影響するおそれがあるためです。ご理解ください。</p>' +
+    '<p>回答データは統計的に処理され、研究目的以外には使いません。今回のデータを研究に使ってほしくない場合は、下のボタンを押してください。</p>' +
+    '<p class="small">お問い合わせ：' + CONFIG.CONTACT + '</p>' +
+    '</div>' +
+    '<p class="center"><button id="wd" class="btn ghost">データを研究に使わない</button></p>' +
+    '<p id="wdmsg" class="center"></p>' +
+    '<p class="small center">他の方には、この課題の内容を話さないようお願いします。</p>'
+  );
+  $('#wd').onclick = async () => {
+    if (!confirm('今回のデータを研究に使わないようにします。よろしいですか？')) return;
+    $('#wd').disabled = true;
+    if (!testMode) {
+      try {
+        await fetch(CONFIG.GAS_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ type: 'withdraw', pid: S.pid }) });
+      } catch (e) {}
+    }
+    $('#wdmsg').textContent = '受け付けました。ありがとうございました。';
+  };
+}
+
+next();
+})();
+</script>
+</body>
+</html>
