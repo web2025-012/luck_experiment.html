@@ -58,7 +58,7 @@ pre{background:#fff;border:1px solid var(--line);border-radius:8px;padding:12px;
  
 /* ================= 設定（ここだけ書き換えればOK） ================= */
 const CONFIG = {
-  GAS_URL: 'https://script.google.com/macros/s/AKfycbw3OxRkELuhN4MY1iwNzyEgUZmVSKtxhvLuBafieUg1rbrfKCcP_eLuCQ6GodOx3nv8/exec',               // Apps Script ウェブアプリのURL。空欄＝テストモード（データは送信されない）
+  GAS_URL: 'https://script.google.com/macros/s/AKfycbzZopTtHmLxlpVXftvP9-9vkJLeR5HR7aeRgjOx66g7tOGOWBlVr1w8cdjMslVj_jgt/exec',               // Apps Script ウェブアプリのURL。空欄＝テストモード（データは送信されない）
   N_TRIALS: 20,              // サイコロを振る回数
   PRIME_MIN_CHARS: 10,       // 思い出して書く文章の最低文字数（両群共通）
   ROLL_ANIM_MS: 700,         // サイコロが転がる演出の長さ
@@ -261,7 +261,7 @@ function stepTaskIntro() {
     '<h2>サイコロを振ります</h2>' +
     '<div class="card">' +
     '<p>これからサイコロを何回か振ります。「サイコロを振る」ボタンを押すたびに1回振られ、出た目が少しの間だけ表示されます。終わると、自動的に次の画面に進みます。</p>' +
-    '<p>メモを取ったり、スクリーンショットを撮ったりせず、ふつうに振ってください。</p>' +
+    '<p>スクリーンショットを撮らず、ふつうに振ってください。</p>' +
     '<p>途中でページを閉じたり、更新したりしないでください。</p>' +
     '</div>' +
     '<p class="center"><button id="go" class="btn">はじめる</button></p>'
