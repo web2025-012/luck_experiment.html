@@ -51,26 +51,26 @@ pre{background:#fff;border:1px solid var(--line);border-radius:8px;padding:12px;
 <div id="bar"><div id="barfill"></div></div>
 <div id="banner"></div>
 <main id="app"><noscript>このページの利用にはJavaScriptを有効にしてください。</noscript></main>
-
+ 
 <script>
 (function () {
 'use strict';
-
+ 
 /* ================= 設定（ここだけ書き換えればOK） ================= */
 const CONFIG = {
-  GAS_URL: 'https://script.google.com/macros/s/AKfycbzZopTtHmLxlpVXftvP9-9vkJLeR5HR7aeRgjOx66g7tOGOWBlVr1w8cdjMslVj_jgt/exec', // Apps Script ウェブアプリのURL。空欄＝テストモード（データは送信されない）
+  GAS_URL: 'https://script.google.com/macros/s/AKfycbw3OxRkELuhN4MY1iwNzyEgUZmVSKtxhvLuBafieUg1rbrfKCcP_eLuCQ6GodOx3nv8/exec',               // Apps Script ウェブアプリのURL。空欄＝テストモード（データは送信されない）
   N_TRIALS: 20,              // サイコロを振る回数
-  INSTR_DELAY_MS: 5000,      // 暗示文が出てから「次へ」が出るまで（両群共通）
+  PRIME_MIN_CHARS: 10,       // 思い出して書く文章の最低文字数（両群共通）
   ROLL_ANIM_MS: 700,         // サイコロが転がる演出の長さ
   RESULT_SHOW_MS: 1500,      // 出目を表示する時間
   SHOW_LUCKY_REMINDER: true, // 課題中にラッキーナンバーを画面に表示するか
   TEXT: {
-    L: 'このサイコロは、今まで使った人の多くが「運がいい」と言っています。',  // 暗示群
-    C: 'これは、ただのサイコロです。'                                         // 統制群
+    L: 'これまでに、自分は運がいいなと感じた出来事を1つ思い出して、短く書いてください。',  // 暗示群
+    C: '昨日1日にあった出来事を1つ思い出して、短く書いてください。'                       // 統制群
   },
-  CONTACT: '【帝京大学 文学部心理学科 實吉ゼミ 杉本愛莉 / メール：24a605012rn@stu.teikyo-u.ac.jp】'
+  CONTACT: '【帝京大学 文学部心理学科 實吉教授ゼミ 杉本愛莉 / mail：24a605012rn@stu.teikyo-u.ac.jp】'
 };
-
+ 
 /* ================= 共通部品 ================= */
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.prototype.slice.call((r || document).querySelectorAll(s));
@@ -78,17 +78,17 @@ const sleep = ms => new Promise(res => setTimeout(res, ms));
 const app = $('#app');
 const params = new URLSearchParams(location.search);
 const testMode = !CONFIG.GAS_URL;
-
+ 
 // テストモード限定の開発用オプション（?fast=1 で待ち時間を短縮、?n=3 で試行数を変更、?cond=L|C で条件を指定）
 if (testMode && params.get('fast')) {
-  CONFIG.INSTR_DELAY_MS = 300; CONFIG.ROLL_ANIM_MS = 100; CONFIG.RESULT_SHOW_MS = 100;
+  CONFIG.PRIME_MIN_CHARS = 1; CONFIG.ROLL_ANIM_MS = 100; CONFIG.RESULT_SHOW_MS = 100;
 }
 if (testMode && Number(params.get('n')) > 0) CONFIG.N_TRIALS = Number(params.get('n'));
-
+ 
 const S = { pid: '', cond: '', via: '', lucky: null, rolls: [], a: {}, instrMs: null, taskStart: null, taskMs: null, t0: performance.now() };
-
+ 
 function show(html) { app.innerHTML = html; window.scrollTo(0, 0); }
-
+ 
 function rollDie() {
   const c = window.crypto;
   if (c && c.getRandomValues) {
@@ -98,7 +98,7 @@ function rollDie() {
   }
   return Math.floor(Math.random() * 6) + 1;
 }
-
+ 
 const PIPS = { 1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8] };
 function dieHTML(face, shake) {
   const on = face ? PIPS[face] : [];
@@ -106,7 +106,7 @@ function dieHTML(face, shake) {
   for (let i = 0; i < 9; i++) cells += on.indexOf(i) >= 0 ? '<span class="pip"></span>' : '<span></span>';
   return '<div class="die' + (shake ? ' shake' : '') + '">' + cells + '</div>';
 }
-
+ 
 function scaleHTML(key, n, left, right) {
   let b = '';
   for (let i = 1; i <= n; i++) b += '<button type="button" class="pt" data-v="' + i + '">' + i + '</button>';
@@ -136,9 +136,9 @@ function radioValue(name) {
   const el = $('input[name="' + name + '"]:checked');
   return el ? el.value : null;
 }
-
+ 
 /* ================= 画面の流れ ================= */
-const steps = [stepConsent, stepAssign, stepInstr, stepLucky, stepTaskIntro, stepTrials,
+const steps = [stepConsent, stepAssign, stepPrime, stepLucky, stepTaskIntro, stepTrials,
                stepQ1, stepQ2, stepQ3, stepQ4, stepQ5, stepCheck, stepDemo, stepSubmit, stepDebrief];
 let idx = -1;
 function next() {
@@ -146,7 +146,7 @@ function next() {
   $('#barfill').style.width = Math.round(idx / (steps.length - 1) * 100) + '%';
   steps[idx]();
 }
-
+ 
 /* 1. 同意 */
 function stepConsent() {
   if (!testMode) {
@@ -162,9 +162,9 @@ function stepConsent() {
     '<div class="card">' +
     '<p>これは、サイコロを使った簡単な課題と、その後の短いアンケートに回答していただく心理学の研究です。</p>' +
     '<ul>' +
-    '<li>所要時間：約6分（パソコン・スマートフォンのどちらでも可）</li>' +
-    '<li>内容：画面上のサイコロを20回振り、その後いくつかの質問に答えます。</li>' +
-    '<li>参加は任意です。最後の送信ボタンを押す前にやめたい場合は、ブラウザを閉じてください（その場合、データは使用されません）。</li>' +
+    '<li>所要時間：約5分（パソコン・スマートフォンのどちらでも可）</li>' +
+    '<li>内容：短い文章を書き、画面上のサイコロを何回か振り、いくつかの質問に答えます。</li>' +
+    '<li>参加は任意です。途中でやめたい場合は、ブラウザを閉じてください（その場合、データは使用されません）。</li>' +
     '<li>氏名・メールアドレスなど、個人を特定する情報は集めません。回答は統計的に処理され、研究目的以外には使いません。</li>' +
     '<li>研究の詳しい目的は、課題のあとにご説明します。</li>' +
     '<li>18歳以上の方が対象です。</li>' +
@@ -177,7 +177,7 @@ function stepConsent() {
   $('#agree').onchange = () => { $('#go').disabled = !$('#agree').checked; };
   $('#go').onclick = next;
 }
-
+ 
 /* 2. 条件割当（人数の少ない群へ。サーバーに繋がらなければ端末内の乱数） */
 async function assignCondition() {
   if (testMode) {
@@ -213,20 +213,27 @@ async function stepAssign() {
   }
   next();
 }
-
-/* 3. 暗示の教示（独立した画面。「次へ」は数秒後に出現。待ち時間は両群共通） */
-function stepInstr() {
+ 
+/* 3. 運の活性化（暗示群：運がいいと感じた出来事を思い出して書く／統制群：昨日の出来事を書く） */
+function stepPrime() {
   show(
-    '<h2>サイコロについて</h2>' +
-    '<div class="card center">' + dieHTML(null) +
-    '<p class="instr">' + CONFIG.TEXT[S.cond] + '</p></div>' +
-    '<p class="center"><button id="go" class="btn" style="visibility:hidden">次へ</button></p>'
+    '<h2>思い出して書いてください</h2>' +
+    '<p class="q">' + CONFIG.TEXT[S.cond] + '</p>' +
+    '<textarea id="prime" rows="5" placeholder="ここに書いてください"></textarea>' +
+    '<p class="small">個人や会社が特定できる名前は書かないでください。</p>' +
+    '<p id="err" class="err center"></p>' +
+    '<p class="center"><button id="go" class="btn">次へ</button></p>'
   );
   const t = performance.now();
-  setTimeout(() => { $('#go').style.visibility = 'visible'; }, CONFIG.INSTR_DELAY_MS);
-  $('#go').onclick = () => { S.instrMs = Math.round(performance.now() - t); next(); };
+  $('#go').onclick = () => {
+    const v = $('#prime').value.trim();
+    if (v.length < CONFIG.PRIME_MIN_CHARS) { $('#err').textContent = CONFIG.PRIME_MIN_CHARS + '文字以上で書いてください。'; return; }
+    S.a.prime = v;
+    S.instrMs = Math.round(performance.now() - t);
+    next();
+  };
 }
-
+ 
 /* 4. ラッキーナンバー */
 function stepLucky() {
   let b = '';
@@ -247,21 +254,21 @@ function stepLucky() {
   });
   $('#go').onclick = next;
 }
-
+ 
 /* 5. 課題の説明 */
 function stepTaskIntro() {
   show(
     '<h2>サイコロを振ります</h2>' +
     '<div class="card">' +
-    '<p>これからサイコロを' + CONFIG.N_TRIALS + '回振ります。「サイコロを振る」ボタンを押すたびに1回振られ、出た目が少しの間だけ表示されます。</p>' +
-    '<p>出た目を数えたり、メモを取ったり、スクリーンショットを撮ったりせず、ふつうに振ってください。</p>' +
+    '<p>これからサイコロを何回か振ります。「サイコロを振る」ボタンを押すたびに1回振られ、出た目が少しの間だけ表示されます。終わると、自動的に次の画面に進みます。</p>' +
+    '<p>メモを取ったり、スクリーンショットを撮ったりせず、ふつうに振ってください。</p>' +
     '<p>途中でページを閉じたり、更新したりしないでください。</p>' +
     '</div>' +
     '<p class="center"><button id="go" class="btn">はじめる</button></p>'
   );
   $('#go').onclick = next;
 }
-
+ 
 /* 6. サイコロ課題 */
 function stepTrials() {
   const N = CONFIG.N_TRIALS;
@@ -269,14 +276,11 @@ function stepTrials() {
   show(
     '<div class="center">' +
     (CONFIG.SHOW_LUCKY_REMINDER ? '<p class="sub">あなたのラッキーナンバー：<b>' + S.lucky + '</b></p>' : '') +
-    '<p id="count" class="sub"></p>' +
     '<div id="dieBox">' + dieHTML(null) + '</div>' +
     '<p><button id="roll" class="btn">サイコロを振る</button></p>' +
     '</div>'
   );
-  const roll = $('#roll'), box = $('#dieBox'), count = $('#count');
-  const updateCount = () => { count.textContent = (done + 1) + ' / ' + N + ' 回目'; };
-  updateCount();
+  const roll = $('#roll'), box = $('#dieBox');
   roll.onclick = async () => {
     roll.disabled = true;
     if (!S.taskStart) S.taskStart = performance.now();
@@ -292,16 +296,15 @@ function stepTrials() {
     await sleep(CONFIG.RESULT_SHOW_MS);
     box.innerHTML = dieHTML(null);
     if (done >= N) { S.taskMs = Math.round(performance.now() - S.taskStart); next(); return; }
-    updateCount();
     roll.disabled = false;
   };
 }
-
+ 
 /* 7. 質問 */
 function stepQ1() {
   show(
     '<h2>質問 1</h2>' +
-    '<p class="q">' + CONFIG.N_TRIALS + '回のうち、あなたのラッキーナンバー（' + S.lucky + '）は何回出たと思いますか？</p>' +
+    '<p class="q">サイコロは全部で' + CONFIG.N_TRIALS + '回振られました。そのうち、あなたのラッキーナンバー（' + S.lucky + '）は何回出たと思いますか？</p>' +
     '<p class="center"><input id="q1" class="num" type="number" inputmode="numeric" min="0" max="' + CONFIG.N_TRIALS + '" step="1"> 回</p>' +
     '<p id="err" class="err center"></p>' +
     '<p class="center"><button id="go" class="btn">次へ</button></p>'
@@ -327,8 +330,8 @@ function scaleStep(key, title, text, n, left, right) {
 }
 function stepQ2() { scaleStep('q2', '質問 2', 'ラッキーナンバーは、よく出たと思いますか？', 7, '1：全く出なかった', '7：非常によく出た'); }
 function stepQ3() { scaleStep('q3', '質問 3', '今日は運が良かったと思いますか？', 7, '1：全くそう思わない', '7：非常にそう思う'); }
-function stepQ4() { scaleStep('q4', '質問 4', 'このサイコロは、運が良いサイコロだと思いますか？', 7, '1：全くそう思わない', '7：非常にそう思う'); }
-
+function stepQ4() { scaleStep('q4', '質問 4', '今、自分は運がいいと感じますか？', 7, '1：全くそう思わない', '7：非常にそう思う'); }
+ 
 function stepQ5() {
   show(
     '<h2>質問 5</h2>' +
@@ -341,15 +344,15 @@ function stepQ5() {
   bindScales(() => { $('#go').disabled = (S.a.q5 == null || S.a.attn == null); });
   $('#go').onclick = next;
 }
-
+ 
 /* 8. 確認項目（教示の想起・メモの有無・目的の推測） */
 function stepCheck() {
   show(
     '<h2>最後に、いくつか質問があります</h2>' +
-    '<p class="q">最初のほうの画面で、サイコロについてどのように書かれていましたか？</p>' +
-    '<label class="opt"><input type="radio" name="recall" value="L"> 今まで使った人の多くが「運がいい」と言っている、と書かれていた</label>' +
-    '<label class="opt"><input type="radio" name="recall" value="C"> ただのサイコロだ、と書かれていた</label>' +
-    '<label class="opt"><input type="radio" name="recall" value="N"> 覚えていない／特に何も書かれていなかった</label>' +
+    '<p class="q">文章を書く課題では、どんな出来事を思い出して書くように言われましたか？</p>' +
+    '<label class="opt"><input type="radio" name="recall" value="L"> 運がいいなと感じた出来事</label>' +
+    '<label class="opt"><input type="radio" name="recall" value="C"> 昨日1日にあった出来事</label>' +
+    '<label class="opt"><input type="radio" name="recall" value="N"> 覚えていない</label>' +
     '<p class="q">サイコロを振っている間に、出た目をメモしたり、指で数えたりしましたか？<br><span class="small">正直にお答えください。「はい」でも不利になることはありません。</span></p>' +
     '<label class="opt"><input type="radio" name="memo" value="no"> いいえ</label>' +
     '<label class="opt"><input type="radio" name="memo" value="yes"> はい</label>' +
@@ -366,7 +369,7 @@ function stepCheck() {
     next();
   };
 }
-
+ 
 function stepDemo() {
   show(
     '<h2>あなたについて（任意）</h2>' +
@@ -383,7 +386,7 @@ function stepDemo() {
     next();
   };
 }
-
+ 
 /* 9. 送信 */
 function buildPayload() {
   const hit = S.rolls.filter(v => v === S.lucky).length;
@@ -392,6 +395,7 @@ function buildPayload() {
     rolls: S.rolls.join(','), n_trials: S.rolls.length, hit: hit,
     q1_est: S.a.q1, q2_impression: S.a.q2, q3_luck_today: S.a.q3, q4_check: S.a.q4, q5_belief: S.a.q5,
     attn_value: S.a.attn, attn_pass: S.a.attn === 3 ? 1 : 0,
+    prime_text: S.a.prime || '', prime_chars: (S.a.prime || '').length,
     recall: S.a.recall, recall_correct: S.a.recall === S.cond ? 1 : 0,
     memo: S.a.memo, purpose: S.a.purpose || '', age: S.a.age === undefined ? '' : S.a.age, gender: S.a.gender || '',
     instr_ms: S.instrMs, task_ms: S.taskMs, total_ms: Math.round(performance.now() - S.t0),
@@ -409,7 +413,7 @@ function downloadCSV(name, text) {
   a.download = name;
   document.body.appendChild(a); a.click(); a.remove();
 }
-
+ 
 async function stepSubmit() {
   const payload = buildPayload();
   if (testMode) {
@@ -440,16 +444,16 @@ async function stepSubmit() {
   $('#retry').onclick = stepSubmit;
   $('#csv').onclick = () => downloadCSV('luck_' + S.pid + '.csv', toCSV(payload));
 }
-
+ 
 /* 10. デブリーフィング */
 function stepDebrief() {
   show(
     '<h1>ご協力ありがとうございました</h1>' +
     '<div class="card">' +
-    '<p>この研究の目的は、「運がいい」という暗示が、結果の記憶や運の感じ方に影響するかを調べることでした。</p>' +
-    '<p>課題の最初の画面には、参加者によって異なる説明が表示されていました（「今まで使った人の多くが『運がいい』と言っている」という説明、または「ただのサイコロ」という説明）。前者は研究のために用意した説明で、事実ではありません。サイコロは全員、まったく同じ公平な乱数で動いており、出た目の偏りは偶然です。</p>' +
+    '<p>この研究の目的は、「自分は運がいい」という思いを呼び起こすと、結果の記憶や運の感じ方に影響するかを調べることでした。</p>' +
+    '<p>課題の最初に、参加者によって異なる指示が出されていました（「運がいいと感じた出来事を思い出す」、または「昨日の出来事を思い出す」）。サイコロは全員、まったく同じ公平な乱数で動いており、出た目の偏りは偶然です。</p>' +
     '<p>目的を事前にすべてお伝えしなかったのは、先に知ると回答に影響するおそれがあるためです。ご理解ください。</p>' +
-    '<p>回答データは、研究目的以外には使いません。今回のデータを研究に使うことに同意していただける場合は、このままブラウザを閉じてください。使ってほしくない場合は、下のボタンを押してください（押したデータは分析から除外します）。</p>' +
+    '<p>回答データは統計的に処理され、研究目的以外には使いません。今回のデータを研究に使ってほしくない場合は、下のボタンを押してください。</p>' +
     '<p class="small">お問い合わせ：' + CONFIG.CONTACT + '</p>' +
     '</div>' +
     '<p class="center"><button id="wd" class="btn ghost">データを研究に使わない</button></p>' +
@@ -467,7 +471,7 @@ function stepDebrief() {
     $('#wdmsg').textContent = '受け付けました。ありがとうございました。';
   };
 }
-
+ 
 next();
 })();
 </script>
