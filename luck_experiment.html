@@ -47,7 +47,7 @@ textarea{width:100%}
 .wheelbox{position:relative;width:min(88vw,320px);margin:18px auto 8px}
 .wheelbox svg{display:block;width:100%;height:auto}
 #wheel{transform-origin:50% 50%;transform:rotate(0deg)}
-.ptr{position:absolute;left:50%;top:-6px;transform:translateX(-50%);width:0;height:0;border-left:13px solid transparent;border-right:13px solid transparent;border-top:26px solid var(--navy);z-index:2}
+.ptr{position:absolute;left:50%;top:-6px;transform:translateX(-50%);width:0;height:0;border-left:13px solid transparent;border-right:13px solid transparent;border-top:26px solid #666666;z-index:2}
 .resmsg{min-height:3.6em;font-size:1.15rem;font-weight:600;margin:.6em 0}
 pre{background:#fff;border:1px solid var(--line);border-radius:8px;padding:12px;font-size:.8rem;white-space:pre-wrap;word-break:break-all;text-align:left}
 </style>
@@ -228,12 +228,12 @@ function wheelSVG() {
   for (let i = 0; i < SEG; i++) {
     const a0 = (i * step - step / 2 - 90) * Math.PI / 180, a1 = (i * step + step / 2 - 90) * Math.PI / 180;
     const x0 = cx + R * Math.cos(a0), y0 = cy + R * Math.sin(a0), x1 = cx + R * Math.cos(a1), y1 = cy + R * Math.sin(a1);
-    g += '<path d="M' + cx + ' ' + cy + ' L' + x0.toFixed(2) + ' ' + y0.toFixed(2) + ' A' + R + ' ' + R + ' 0 0 1 ' + x1.toFixed(2) + ' ' + y1.toFixed(2) + ' Z" fill="#e3e6f3" stroke="#ffffff" stroke-width="3"/>';
+    g += '<path d="M' + cx + ' ' + cy + ' L' + x0.toFixed(2) + ' ' + y0.toFixed(2) + ' A' + R + ' ' + R + ' 0 0 1 ' + x1.toFixed(2) + ' ' + y1.toFixed(2) + ' Z" fill="#e4e4e4" stroke="#ffffff" stroke-width="3"/>';
     const label = (i % 2 === 0) ? '当たり' : '外れ';
-    g += '<text x="' + cx + '" y="' + (cy - 92) + '" text-anchor="middle" dominant-baseline="middle" font-size="22" font-weight="700" fill="#1E2761" transform="rotate(' + (i * step) + ' ' + cx + ' ' + cy + ')">' + label + '</text>';
+    g += '<text x="' + cx + '" y="' + (cy - 92) + '" text-anchor="middle" dominant-baseline="middle" font-size="22" font-weight="700" fill="#333333" transform="rotate(' + (i * step) + ' ' + cx + ' ' + cy + ')">' + label + '</text>';
   }
-  return '<svg viewBox="0 0 320 320" aria-label="ルーレット"><circle cx="160" cy="160" r="156" fill="#fff" stroke="#1E2761" stroke-width="4"/>' +
-         '<g id="wheel">' + g + '</g><circle cx="160" cy="160" r="9" fill="#1E2761"/></svg>';
+  return '<svg viewBox="0 0 320 320" aria-label="ルーレット"><circle cx="160" cy="160" r="156" fill="#fff" stroke="#666666" stroke-width="4"/>' +
+         '<g id="wheel">' + g + '</g><circle cx="160" cy="160" r="9" fill="#666666"/></svg>';
 }
 function randInt(n) { // 0〜n-1の一様乱数
   const c = window.crypto;
